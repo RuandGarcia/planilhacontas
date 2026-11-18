@@ -98,6 +98,9 @@ tr.d td:first-child{box-shadow:inset 3px 0 var(--red)}
 .rule .ren{grid-column:1/3}
 #sugBar{display:none;align-items:center;gap:8px;flex-wrap:wrap;background:var(--acc-soft);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:13px}
 #sugBar.on{display:flex}
+#mModal.wide{max-width:860px}
+#mMap select{display:block;width:100%;margin-top:3px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:13px;padding:6px;border-radius:6px}
+.prevtb td{font-size:13px;padding:4px 6px}.prevtb select{border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-size:12px;padding:4px;border-radius:6px;width:100%}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30}
 .toast.on{opacity:1}
 </style>
@@ -213,7 +216,7 @@ tr.d td:first-child{box-shadow:inset 3px 0 var(--red)}
 </section>
 </main>
 
-<div class="modal" id="modal"><div class="box">
+<div class="modal" id="modal"><div class="box" id="mModal">
   <div class="bar" style="margin-bottom:12px"><h2 style="margin:0;font-size:16px">Exportar / Importar</h2><span class="spacer"></span>
     <div class="tabs"><button id="mtExp" class="on">Exportar</button><button id="mtImp">Importar</button></div></div>
 
@@ -232,6 +235,14 @@ tr.d td:first-child{box-shadow:inset 3px 0 var(--red)}
     <label class="status" style="display:block;margin-top:8px"><input type="checkbox" id="mCard"> É fatura de cartão de crédito (compras vêm com valor positivo). A fatura do Nubank é detectada sozinha.</label>
     <label class="status" style="display:block;margin-top:4px"><input type="checkbox" id="mReplace"> Substituir todos os dados atuais (em vez de somar aos existentes)</label>
     <div id="mMsg" class="status" style="margin-top:8px;min-height:18px"></div>
+    <div id="mPrev" style="display:none;margin-top:10px">
+      <h3 style="font-size:14px;margin:0 0 6px">Confira as colunas</h3>
+      <p class="status" style="margin:0 0 8px">Se algo estiver na coluna errada, troque aqui. A tabela abaixo atualiza na hora. Você também pode mudar a categoria de cada linha antes de importar.</p>
+      <div id="mMap" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px"></div>
+      <div id="mPrevInfo" class="status" style="margin:10px 0 6px"></div>
+      <div style="max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px"><table class="prevtb"><thead><tr><th>Data</th><th>Descrição</th><th style="text-align:right">Valor</th><th>Categoria</th></tr></thead><tbody id="mPrevTb"></tbody></table></div>
+      <div class="bar" style="margin-top:10px"><button class="btn pri" id="mGo">Confirmar importação</button><button class="btn" id="mBack">Voltar</button></div>
+    </div>
     <div class="bar" style="margin-top:6px"><button class="btn pri" id="mImport">Importar</button><button class="btn" id="mConfirm" style="display:none;border-color:var(--red);color:var(--red)">Confirmar substituição</button></div>
   </div>
 
@@ -611,7 +622,7 @@ function mTab(imp){
 }
 $('#mtExp').onclick=()=>mTab(false);$('#mtImp').onclick=()=>mTab(true);
 $('#exportBtn').onclick=()=>{$('#modal').classList.add('on');mTab(false);$('#mCsv').click()};
-$('#mClose').onclick=()=>$('#modal').classList.remove('on');
+$('#mClose').onclick=()=>{$('#modal').classList.remove('on');hidePreview()};
 
 function toCsv(rows){
   const q=x=>{x=String(x??'');return /[;"\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x};
@@ -630,16 +641,17 @@ $('#mFile').onchange=async e=>{
     const buf=await f.arrayBuffer();
     let txt=new TextDecoder('utf-8').decode(buf);
     if(txt.includes('\uFFFD'))txt=new TextDecoder('windows-1252').decode(buf); // CSV salvo pelo Excel
-    $('#mIn').value=txt;$('#mMsg').textContent='Arquivo “'+f.name+'” carregado. Clique em Importar.';
+    $('#mIn').value=txt;if(prev)hidePreview();$('#mMsg').textContent='Arquivo “'+f.name+'” carregado. Clique em Importar.';
   }catch(err){$('#mMsg').textContent='Não consegui ler o arquivo.'}
 };
 
 /* parser CSV com suporte a aspas, ; ou , e quebras de linha */
+let lastSep=',';
 function parseCsv(txt){
   txt=txt.replace(/^﻿/,'').replace(/\r\n?/g,'\n');
   const first=txt.split('\n')[0];
   const cnt=c=>(first.match(new RegExp('\\'+c,'g'))||[]).length;
-  const sep=[';','\t',','].sort((a,b)=>cnt(b)-cnt(a))[0];
+  const sep=[';','\t',','].sort((a,b)=>cnt(b)-cnt(a))[0];lastSep=sep;
   const rows=[];let row=[],cur='',inQ=false;
   for(let i=0;i<txt.length;i++){
     const c=txt[i];
@@ -670,38 +682,47 @@ function parseNum(s){
   const v=parseFloat(s);return neg?-v:v;
 }
 const yes=s=>/^(s|sim|y|yes|x|1|true|pago|ok)$/.test(norm(s));
-function csvToLanc(txt){
-  const rows=parseCsv(txt);if(!rows.length)throw new Error('O CSV está vazio.');
+function csvAnalyze(txt){
+  let rows=parseCsv(txt);let sep=lastSep;
+  // Excel em português costuma salvar tudo numa coluna só: "03/11/2026,-23.90,..."
+  if(rows.length&&rows.every(r=>r.length===1)&&rows.some(r=>/[,;\t]/.test(r[0]))){rows=parseCsv(rows.map(r=>r[0]).join('\n'));sep=lastSep}
+  if(!rows.length)throw new Error('O CSV está vazio.');
   const H=rows[0].map(norm);
   const find=(...k)=>H.findIndex(h=>k.some(x=>h===x||h.startsWith(x)));
-  let ix={data:find('data','date','dt','vencimento'),tipo:find('tipo','type','natureza'),desc:find('descricao','desc','historico','lancamento','description','title','titulo','estabelecimento','memo','nome'),cat:find('categoria','category','cat'),valor:find('valor','value','amount','montante','quantia'),pago:find('pago','status','recebido','paid'),fixo:find('fixo','recorrente','fixed')};
-  let start=1;
-  if(ix.data<0&&ix.valor<0){ // sem cabeçalho: assume a ordem do export
-    if(!parseDate(rows[0][0]))throw new Error('Não encontrei as colunas Data e Valor no cabeçalho.');
-    ix={data:0,tipo:1,desc:2,cat:3,valor:4,pago:5,fixo:6};start=0;
-  }
-  if(ix.data<0)throw new Error('Falta a coluna “Data”.');
-  if(ix.valor<0)throw new Error('Falta a coluna “Valor”.');
-  // Fatura do cartão Nubank (date,title,amount): compra vem positiva
-  const cartao=$('#mCard').checked||(H.includes('title')&&H.includes('amount')&&ix.tipo<0);
-  const ixId=find('identificador','id','fitid');
+  let ix={data:find('data','date','dt','vencimento'),tipo:find('tipo','type','natureza'),desc:find('descricao','desc','historico','lancamento','description','title','titulo','estabelecimento','memo','nome'),cat:find('categoria','category'),valor:find('valor','value','amount','montante','quantia'),pago:find('pago','status','paid'),fixo:find('fixo','recorrente','fixed'),id:find('identificador','fitid')};
+  let start=1,header=rows[0].map((c,i)=>c.trim()||('Coluna '+(i+1)));
+  const semCab=ix.data<0&&ix.valor<0&&rows[0].some(v=>parseDate(v));
+  if(semCab){start=0;header=rows[0].map((_,i)=>'Coluna '+(i+1));ix={data:-1,tipo:-1,desc:-1,cat:-1,valor:-1,pago:-1,fixo:-1,id:-1}}
+  const amostra=rows[start]||[];
+  if(ix.data<0)ix.data=amostra.findIndex(v=>parseDate(v));
+  if(ix.valor<0)ix.valor=amostra.findIndex((v,i)=>i!==ix.data&&/\d/.test(v)&&!parseDate(v)&&!isNaN(parseNum(v))&&/^[\s\-+(R$]*[\d.,]+\)?-?$/.test(v.trim()));
+  if(ix.desc<0){let best=-1,bl=0;amostra.forEach((v,i)=>{if(i!==ix.data&&i!==ix.valor&&v.length>bl){bl=v.length;best=i}});ix.desc=best}
+  const cartao=H.includes('title')&&H.includes('amount')&&ix.tipo<0;
+  return {rows,header,ix,start,sep,cartao};
+}
+function csvBuild(a,cartao){
+  const {rows,ix,start,header,sep}=a;const hl=header.length;
   const out=[],errs=[];let skipped=0;
   for(let i=start;i<rows.length;i++){
-    const r=rows[i],g=k=>ix[k]>=0?(r[ix[k]]||'').trim():'';
+    let r=rows[i];
+    if(r.length>hl&&ix.desc>=0){ // vírgula dentro da descrição empurrou as colunas
+      const extra=r.length-hl;
+      r=[...r.slice(0,ix.desc),r.slice(ix.desc,ix.desc+extra+1).join(sep),...r.slice(ix.desc+extra+1)];
+    }
+    const g=k=>ix[k]>=0?(r[ix[k]]||'').trim():'';
     const d=parseDate(g('data')),v=parseNum(g('valor'));
     if(!d||isNaN(v)){errs.push(i+1);continue}
     if(cartao&&/pagamento recebido|pagamento da fatura|pagamento efetuado/.test(norm(g('desc')))){skipped++;continue}
     const t=norm(g('tipo'));
-    let tipo=t?(/^(r|receita|entrada|credito|c|income)/.test(t)?'r':'d'):cartao?(v>0?'d':'r'):(v<0?'d':'r');
-    const cat=g('cat')||(tipo==='r'?'Renda extra':'Outros');
-    const novo={id:uid(),data:d,desc:g('desc'),cat,tipo,valor:Math.abs(v),pago:ix.pago>=0?yes(g('pago')):false,fixo:ix.fixo>=0?yes(g('fixo')):false};
-    if(cartao&&tipo==='d'){novo.pago=true}
-    if(ixId>=0&&r[ixId])novo.ext=String(r[ixId]).trim();
+    const tipo=t?(/^(r|receita|entrada|credito|c|income)/.test(t)?'r':'d'):cartao?(v>0?'d':'r'):(v<0?'d':'r');
+    const novo={id:uid(),data:d,desc:g('desc'),cat:g('cat')||(tipo==='r'?'Renda extra':'Outros'),tipo,valor:Math.abs(v),pago:ix.pago>=0?yes(g('pago')):cartao&&tipo==='d',fixo:ix.fixo>=0?yes(g('fixo')):false};
+    if(ix.id>=0&&g('id'))novo.ext=g('id');
     if(!g('cat'))applyRule(novo);
     out.push(novo);
   }
   return {out,errs,skipped,cartao};
 }
+function csvToLanc(txt){const a=csvAnalyze(txt);return csvBuild(a,$('#mCard').checked||a.cartao)}
 
 /* OFX (extrato/fatura do Nubank e outros bancos) */
 function ofxToLanc(txt){
@@ -746,7 +767,13 @@ $('#mImport').onclick=()=>{
       applyImport({lanc:[...state.lanc,...nl],eventos:[...state.eventos,...ne],cats},`${nl.length} lançamento(s) e ${ne.length} compromisso(s) importados`);
     }else{
       const isOfx=/<OFX>|<STMTTRN>/i.test(txt);
-      const {out,errs,skipped,cartao}=isOfx?ofxToLanc(txt):csvToLanc(txt);
+      if(!isOfx){showPreview(csvAnalyze(txt));return}
+      finishImport(ofxToLanc(txt),replace);
+    }
+  }catch(e){msg.innerHTML='<span class="neg">⚠ '+esc(e.message||'Não consegui importar.')+'</span>'}
+};
+function finishImport({out,errs,skipped,cartao},replace){
+      const msg=$('#mMsg');
       if(!out.length)throw new Error('Nenhuma linha válida. Confira se as datas e os valores estão preenchidos.'+(errs.length?' Linhas com problema: '+errs.slice(0,10).join(', '):''));
       const key=l=>l.data+'|'+l.tipo+'|'+norm(l.desc)+'|'+(+l.valor).toFixed(2);
       const exist=new Set(replace?[]:state.lanc.map(key));
@@ -760,11 +787,46 @@ $('#mImport').onclick=()=>{
         $('#mConfirm').style.display='';return;
       }
       applyImport({lanc:[...state.lanc,...nl],eventos:state.eventos,cats},label);
+      hidePreview();
       if(nl.length){const f=nl.slice().sort(byDate).pop();const [y,m]=f.data.split('-').map(Number);fCur=new Date(y,m-1,1);renderFin()}
-    }
-  }catch(e){msg.innerHTML='<span class="neg">⚠ '+esc(e.message||'Não consegui importar.')+'</span>'}
-};
-$('#mConfirm').onclick=()=>{if(pendingReplace){applyImport(pendingReplace.s,pendingReplace.label);pendingReplace=null}};
+}
+
+/* pré-visualização do CSV com escolha de colunas */
+let prev=null;
+function hidePreview(){prev=null;$('#mPrev').style.display='none';$('#mImport').style.display='';$('#mModal').classList.remove('wide')}
+function showPreview(a){
+  prev={a,res:null};
+  $('#mPrev').style.display='';$('#mImport').style.display='none';$('#mModal').classList.add('wide');
+  $('#mMsg').textContent='';
+  if(a.cartao)$('#mCard').checked=true;
+  const fields=[['data','Data *'],['valor','Valor *'],['desc','Descrição'],['cat','Categoria'],['tipo','Tipo (receita/despesa)'],['pago','Pago'],['id','Identificador']];
+  const opts=i=>'<option value="-1">— não usar —</option>'+a.header.map((hd,j)=>{const ex=(a.rows[a.start]||[])[j];return `<option value="${j}" ${j===i?'selected':''}>${esc(hd)}${ex?' — ex.: '+esc(String(ex).slice(0,25)):''}</option>`}).join('');
+  $('#mMap').innerHTML=fields.map(([k,l])=>`<label class="status">${l}<select data-k="${k}">${opts(a.ix[k])}</select></label>`).join('');
+  $('#mMap').querySelectorAll('select').forEach(s=>s.onchange=()=>{a.ix[s.dataset.k]=+s.value;renderPreview()});
+  renderPreview();
+}
+function renderPreview(){
+  if(!prev)return;const a=prev.a,tb=$('#mPrevTb');
+  if(a.ix.data<0||a.ix.valor<0){tb.innerHTML='<tr><td class="empty">Escolha acima as colunas de Data e Valor.</td></tr>';$('#mGo').disabled=true;$('#mPrevInfo').textContent='';return}
+  const res=csvBuild(a,$('#mCard').checked);prev.res=res;
+  const outros=res.out.filter(l=>l.cat==='Outros').length;
+  $('#mPrevInfo').innerHTML=`<b>${res.out.length}</b> linha(s) válida(s)`+(res.errs.length?` · <span class="neg">${res.errs.length} inválida(s) (linhas ${res.errs.slice(0,8).join(', ')}${res.errs.length>8?'…':''})</span>`:'')+(res.skipped?` · ${res.skipped} pagamento(s) de fatura ignorado(s)`:'')+(outros?` · <b>${outros}</b> sem categoria (em “Outros”): ajuste abaixo se quiser`:' · todas com categoria ✓');
+  $('#mGo').disabled=!res.out.length;$('#mGo').textContent=`Confirmar importação (${res.out.length})`;
+  tb.innerHTML='';
+  res.out.forEach(l=>{
+    const tr=document.createElement('tr');
+    const opts=state.cats.map(c=>`<option ${c===l.cat?'selected':''}>${esc(c)}</option>`).join('')+(state.cats.includes(l.cat)?'':`<option selected>${esc(l.cat)}</option>`);
+    const br=l.data.slice(8)+'/'+l.data.slice(5,7);
+    tr.innerHTML=`<td style="white-space:nowrap">${br}</td><td>${esc(l.desc)}</td><td style="text-align:right;white-space:nowrap" class="${l.tipo==='r'?'pos':'neg'}">${l.tipo==='r'?'+':'−'} ${BRL(l.valor)}</td><td><select style="${l.cat==='Outros'?'border-color:var(--amber)':''}">${opts}</select></td>`;
+    tr.querySelector('select').onchange=e=>{l.cat=e.target.value;e.target.style.borderColor=''};
+    tb.appendChild(tr);
+  });
+}
+$('#mCard').onchange=renderPreview;
+$('#mBack').onclick=hidePreview;
+$('#mGo').onclick=()=>{if(!prev||!prev.res)return;try{finishImport(prev.res,$('#mReplace').checked)}catch(e){$('#mMsg').innerHTML='<span class="neg">⚠ '+esc(e.message)+'</span>'}};
+$('#mIn').addEventListener('input',()=>{if(prev)hidePreview()});
+$('#mConfirm').onclick=()=>{if(pendingReplace){applyImport(pendingReplace.s,pendingReplace.label);pendingReplace=null;hidePreview()}};
 
 /* ---------- agenda ---------- */
 function eventsOn(d){return state.eventos.filter(e=>e.data===d).sort((a,b)=>(a.hora||'99').localeCompare(b.hora||'99'))}
