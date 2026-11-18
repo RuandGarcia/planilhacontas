@@ -93,6 +93,11 @@ tr.d td:first-child{box-shadow:inset 3px 0 var(--red)}
 .modal.on{display:flex}
 .modal .box{background:var(--card);border-radius:var(--r);padding:20px;max-width:520px;width:100%;max-height:85vh;overflow:auto}
 .modal textarea{width:100%;min-height:200px;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--bg);color:var(--ink)}
+.rule{border-bottom:1px solid var(--line);padding:8px 0;display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center}
+.rule input,.rule select,#sugBar input{border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;padding:6px;border-radius:6px;width:100%;font-size:13px}
+.rule .ren{grid-column:1/3}
+#sugBar{display:none;align-items:center;gap:8px;flex-wrap:wrap;background:var(--acc-soft);border-radius:8px;padding:8px 10px;margin-bottom:10px;font-size:13px}
+#sugBar.on{display:flex}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30}
 .toast.on{opacity:1}
 </style>
@@ -140,6 +145,8 @@ tr.d td:first-child{box-shadow:inset 3px 0 var(--red)}
           <button class="btn sm" id="addRec">+ Receita</button>
           <button class="btn sm pri" id="addDes">+ Despesa</button>
         </div>
+        <div id="sugBar">💡 Sempre classificar descrições com <input id="sugKey" style="width:160px"> como <b id="sugCat"></b>?
+          <button class="btn sm pri" id="sugOk">Criar regra</button><button class="btn sm ghost" id="sugNo">Agora não</button></div>
         <div style="overflow-x:auto">
         <table>
           <thead><tr><th style="width:120px">Data</th><th>Descrição</th><th style="width:140px">Categoria</th><th style="width:110px;text-align:right">Valor (R$)</th><th style="width:50px">Pago</th><th style="width:50px">Fixo</th><th style="width:30px"></th></tr></thead>
@@ -157,6 +164,12 @@ tr.d td:first-child{box-shadow:inset 3px 0 var(--red)}
         <h2>Categorias</h2>
         <div id="catList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
         <div style="display:flex;gap:6px"><input id="newCat" placeholder="Nova categoria" style="flex:1;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;padding:7px;border-radius:6px"><button class="btn sm" id="addCat">Adicionar</button></div>
+      </div>
+      <div class="panel">
+        <h2>Regras automáticas</h2>
+        <p class="status" style="margin-top:0">Se a descrição <b>contém</b> o texto, o lançamento recebe a categoria (e, se quiser, um nome mais legível). Valem na importação de CSV e quando você lança algo novo. A primeira regra que bater é a usada.</p>
+        <div id="ruleList"></div>
+        <div class="bar" style="margin-top:10px;margin-bottom:0"><button class="btn sm" id="addRule">+ Nova regra</button><span class="spacer"></span><button class="btn sm" id="applyRules" title="Aplica as regras nos lançamentos deste mês que estão em 'Outros' ou 'Renda extra'">Aplicar no mês</button></div>
       </div>
     </div>
   </div>
@@ -213,7 +226,7 @@ tr.d td:first-child{box-shadow:inset 3px 0 var(--red)}
 
   <div id="mImpBox" style="display:none">
     <p class="status" style="margin-top:0">Escolha um arquivo <b>.csv</b> ou <b>.json</b>, ou cole o conteúdo abaixo. O formato é detectado sozinho.<br>
-    CSV: colunas <code>Data; Tipo; Descrição; Categoria; Valor; Pago; Fixo</code> — separador <code>;</code> ou <code>,</code>, data <code>dd/mm/aaaa</code> ou <code>aaaa-mm-dd</code>. Sem coluna Tipo, valor negativo vira despesa e positivo vira receita.</p>
+    CSV: colunas <code>Data; Tipo; Descrição; Categoria; Valor; Pago; Fixo</code> — separador <code>;</code> ou <code>,</code>, data <code>dd/mm/aaaa</code> ou <code>aaaa-mm-dd</code>. Sem coluna Tipo, valor negativo vira despesa e positivo vira receita. Linhas sem categoria são classificadas pelas <b>Regras automáticas</b>.</p>
     <div class="bar"><input type="file" id="mFile" accept=".csv,.json,.txt,text/csv,application/json"></div>
     <textarea id="mIn" placeholder="Data;Tipo;Descrição;Categoria;Valor;Pago;Fixo&#10;05/11/2026;Despesa;Aluguel;Moradia;1500,00;Sim;Sim"></textarea>
     <label class="status" style="display:block;margin-top:8px"><input type="checkbox" id="mReplace"> Substituir todos os dados atuais (em vez de somar aos existentes)</label>
@@ -259,7 +272,16 @@ const DOW=['dom','seg','ter','qua','qui','sex','sáb'];
 const LSKEY='meu-painel-v1';
 
 const DEFAULT_CATS=['Salário','Renda extra','Moradia','Alimentação','Transporte','Saúde','Educação','Lazer','Assinaturas','Contas (luz/água/net)','Cartão de crédito','Investimentos','Outros'];
-let state={lanc:[],eventos:[],cats:DEFAULT_CATS.slice()};
+const DEFAULT_RULES=[
+ ['uber','Transporte'],['99app','Transporte'],['99 pop','Transporte'],['posto','Transporte'],['shell','Transporte'],['ipiranga','Transporte'],['estacionamento','Transporte'],['metro','Transporte'],['bilhete unico','Transporte'],
+ ['ifood','Alimentação'],['rappi','Alimentação'],['mercado','Alimentação'],['carrefour','Alimentação'],['pao de acucar','Alimentação'],['assai','Alimentação'],['atacadao','Alimentação'],['padaria','Alimentação'],['restaurante','Alimentação'],
+ ['netflix','Assinaturas'],['spotify','Assinaturas'],['amazon prime','Assinaturas'],['disney','Assinaturas'],['hbo','Assinaturas'],['youtube','Assinaturas'],['apple.com','Assinaturas'],['claude','Assinaturas'],['chatgpt','Assinaturas'],
+ ['farmacia','Saúde'],['drogasil','Saúde'],['droga raia','Saúde'],['raia','Saúde'],['pague menos','Saúde'],['academia','Saúde'],['smartfit','Saúde'],
+ ['enel','Contas (luz/água/net)'],['sabesp','Contas (luz/água/net)'],['comgas','Contas (luz/água/net)'],['vivo','Contas (luz/água/net)'],['claro','Contas (luz/água/net)'],['tim ','Contas (luz/água/net)'],
+ ['aluguel','Moradia'],['condominio','Moradia'],['fiap','Educação'],['udemy','Educação'],['alura','Educação'],['fatura','Cartão de crédito'],
+ ['salario','Salário'],['pagamento de salario','Salário'],['rendimento','Investimentos'],['aplicacao','Investimentos'],['tesouro','Investimentos'],['cdb','Investimentos']
+].map(([contem,cat],i)=>({id:'r'+i,contem,cat,desc:''}));
+let state={lanc:[],eventos:[],cats:DEFAULT_CATS.slice(),regras:DEFAULT_RULES.map(r=>({...r}))};
 let today=new Date();
 let fCur=new Date(today.getFullYear(),today.getMonth(),1);
 let aCur=new Date(today.getFullYear(),today.getMonth(),1);
@@ -276,10 +298,11 @@ function normalize(s){
   state.lanc=Array.isArray(s.lanc)?s.lanc:[];
   state.eventos=Array.isArray(s.eventos)?s.eventos:[];
   state.cats=Array.isArray(s.cats)&&s.cats.length?s.cats:DEFAULT_CATS.slice();
+  state.regras=Array.isArray(s.regras)?s.regras:DEFAULT_RULES.map(r=>({...r}));
 }
 function mergeStates(a,b){
   const u=(x,y)=>{const m=new Map();(x||[]).forEach(i=>m.set(i.id,i));(y||[]).forEach(i=>{if(!m.has(i.id))m.set(i.id,i)});return [...m.values()]};
-  return {lanc:u(a.lanc,b.lanc),eventos:u(a.eventos,b.eventos),cats:[...new Set([...(a.cats||[]),...(b.cats||[])])]};
+  return {lanc:u(a.lanc,b.lanc),eventos:u(a.eventos,b.eventos),cats:[...new Set([...(a.cats||[]),...(b.cats||[])])],regras:Array.isArray(a.regras)?u(a.regras,b.regras):b.regras};
 }
 
 /* ---------- GitHub (repositório privado) ---------- */
@@ -441,7 +464,7 @@ function renderFin(){
   const ks=$('#kSal');ks.textContent=BRL(t.s);ks.className='val '+(t.s>=0?'pos':'neg');
   $('#kSalSub').textContent=t.r?Math.round(t.s/t.r*100)+'% da receita':'';
   $('#kAbe').textContent=BRL(t.ab);$('#kAbeSub').textContent=t.nab+' conta(s) não paga(s)';
-  renderTable(items);renderCats(items);renderCatList();renderYear();
+  renderTable(items);renderCats(items);renderCatList();renderRules();renderYear();
 }
 
 function renderTable(items){
@@ -465,6 +488,8 @@ function renderTable(items){
       inp.addEventListener('change',()=>{
         const f=inp.dataset.f;
         l[f]=inp.type==='checkbox'?inp.checked:inp.type==='number'?(parseFloat(inp.value)||0):inp.value;
+        if(f==='desc'&&(l.cat==='Outros'||l.cat==='Renda extra'||!l.cat))applyRule(l,false);
+        if(f==='cat')suggestRule(l);
         save();
         if(f==='data'&&!(l.data||'').startsWith(ym(fCur))){toast('Lançamento movido para outro mês')}
         renderFin();renderAg();
@@ -512,6 +537,51 @@ function renderCats(items){
   const tot=arr.reduce((s,e)=>s+e[1],0);
   $('#cats').innerHTML=arr.length?arr.map(([c,v])=>`<div class="catrow"><div class="top"><span>${esc(c)}</span><span><b>${BRL(v)}</b> <span class="status">${Math.round(v/tot*100)}%</span></span></div><div class="track"><div class="fill" style="width:${v/arr[0][1]*100}%"></div></div></div>`).join(''):'<div class="empty">Sem despesas neste mês</div>';
 }
+/* ---------- regras automáticas ---------- */
+const normTxt=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim();
+function findRule(desc){const d=' '+normTxt(desc)+' ';return (state.regras||[]).find(r=>r.contem&&r.cat&&d.includes(normTxt(r.contem)))}
+function applyRule(l){
+  const r=findRule(l.desc);if(!r)return false;
+  l.cat=r.cat;if(!state.cats.includes(r.cat))state.cats.push(r.cat);
+  if(r.desc)l.desc=r.desc;
+  return true;
+}
+function renderRules(){
+  const box=$('#ruleList');box.innerHTML='';
+  if(!state.regras.length){box.innerHTML='<div class="status">Nenhuma regra ainda.</div>';return}
+  state.regras.forEach((r,i)=>{
+    const row=document.createElement('div');row.className='rule';
+    const opts=state.cats.map(c=>`<option ${c===r.cat?'selected':''}>${esc(c)}</option>`).join('')+(r.cat&&!state.cats.includes(r.cat)?`<option selected>${esc(r.cat)}</option>`:'');
+    row.innerHTML=`<input data-f="contem" value="${esc(r.contem)}" placeholder="contém… (ex.: uber)"><select data-f="cat">${opts}</select><button class="btn ghost sm" title="Excluir">✕</button><input class="ren" data-f="desc" value="${esc(r.desc||'')}" placeholder="renomear para… (opcional)">`;
+    row.querySelectorAll('[data-f]').forEach(inp=>inp.addEventListener('change',()=>{r[inp.dataset.f]=inp.value.trim();save()}));
+    row.querySelector('button').onclick=()=>{state.regras.splice(i,1);save();renderRules()};
+    box.appendChild(row);
+  });
+}
+$('#addRule').onclick=()=>{state.regras.unshift({id:uid(),contem:'',cat:'Outros',desc:''});save();renderRules();$('#ruleList input').focus()};
+$('#applyRules').onclick=()=>{
+  let n=0;monthItems(fCur).forEach(l=>{if((l.cat==='Outros'||l.cat==='Renda extra'||!l.cat)&&applyRule(l,true))n++});
+  if(n){save();renderFin();renderAg()}toast(n?n+' lançamento(s) classificados':'Nenhum lançamento em “Outros” bateu com as regras');
+};
+let sugFor=null;
+function suggestRule(l){
+  const bar=$('#sugBar');
+  if(!l.desc||!l.cat||l.cat==='Outros'){bar.classList.remove('on');return}
+  const r=findRule(l.desc);if(r&&r.cat===l.cat){bar.classList.remove('on');return}
+  sugFor=l;
+  const words=normTxt(l.desc).replace(/[0-9*#\/\-.,]+/g,' ').split(' ').filter(w=>w.length>2&&!['pix','compra','pagamento','debito','credito','enviado','recebido','transferencia','cartao','para','com'].includes(w));
+  $('#sugKey').value=(words.slice(0,2).join(' ')||normTxt(l.desc)).trim();
+  $('#sugCat').textContent=l.cat;bar.classList.add('on');
+}
+$('#sugNo').onclick=()=>$('#sugBar').classList.remove('on');
+$('#sugOk').onclick=()=>{
+  const k=$('#sugKey').value.trim();if(!k||!sugFor)return;
+  state.regras.unshift({id:uid(),contem:k,cat:sugFor.cat,desc:''});
+  let n=0;state.lanc.forEach(l=>{if(l!==sugFor&&(l.cat==='Outros'||l.cat==='Renda extra'||!l.cat)&&normTxt(l.desc).includes(normTxt(k))){l.cat=sugFor.cat;n++}});
+  $('#sugBar').classList.remove('on');save();renderFin();renderAg();
+  toast('Regra criada'+(n?` · ${n} outro(s) lançamento(s) reclassificados`:''));
+};
+
 function renderCatList(){
   $('#catList').innerHTML=state.cats.map((c,i)=>`<span class="chip" style="display:inline-flex;gap:4px;align-items:center;font-size:12px;padding:4px 8px">${esc(c)}<a data-i="${i}" style="cursor:pointer;opacity:.6" title="Remover">✕</a></span>`).join('');
   $('#catList').querySelectorAll('a').forEach(a=>a.onclick=()=>{state.cats.splice(+a.dataset.i,1);save();renderFin()});
@@ -619,7 +689,9 @@ function csvToLanc(txt){
     const t=norm(g('tipo'));
     let tipo=t?(/^(r|receita|entrada|credito|c|income)/.test(t)?'r':'d'):(v<0?'d':'r');
     const cat=g('cat')||(tipo==='r'?'Renda extra':'Outros');
-    out.push({id:uid(),data:d,desc:g('desc'),cat,tipo,valor:Math.abs(v),pago:ix.pago>=0?yes(g('pago')):false,fixo:ix.fixo>=0?yes(g('fixo')):false});
+    const novo={id:uid(),data:d,desc:g('desc'),cat,tipo,valor:Math.abs(v),pago:ix.pago>=0?yes(g('pago')):false,fixo:ix.fixo>=0?yes(g('fixo')):false};
+    if(!g('cat'))applyRule(novo,true);
+    out.push(novo);
   }
   return {out,errs};
 }
