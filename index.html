@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meu Painel — Finanças e Agenda</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f7f9;--card:#fff;--ink:#1c2230;--muted:#6b7385;--line:#e4e7ec;
+  --acc:#2f6fed;--acc-soft:#e8effd;--green:#16a36a;--green-soft:#e3f6ee;--red:#e0464b;--red-soft:#fdeaea;--amber:#d98a0b;
+  --r:12px;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#12151c;--card:#1b1f29;--ink:#e8ebf2;--muted:#9aa2b4;--line:#2b3140;--acc:#5b8cff;--acc-soft:#22304d;--green:#3ccf8e;--green-soft:#173327;--red:#ff6b70;--red-soft:#3a1f22}
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 24px;border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5;flex-wrap:wrap}
+h1{font-size:18px;margin:0;font-weight:700}
+.tabs{display:flex;gap:4px;background:var(--bg);padding:4px;border-radius:10px}
+.tabs button{border:0;background:none;padding:8px 16px;border-radius:8px;font:inherit;font-weight:600;color:var(--muted);cursor:pointer}
+.tabs button.on{background:var(--card);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.status{font-size:12px;color:var(--muted)}
+main{max-width:1200px;margin:0 auto;padding:20px 24px 60px}
+.view{display:none}.view.on{display:block}
+.bar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.month{font-size:20px;font-weight:700;min-width:190px;text-align:center;text-transform:capitalize}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 12px;border-radius:8px;font:inherit;font-weight:500;cursor:pointer}
+.btn:hover{border-color:var(--acc)}
+.btn.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
+.btn.sm{padding:4px 8px;font-size:12px}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.btn.ghost:hover{color:var(--red)}
+.spacer{flex:1}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.card .lbl{color:var(--muted);font-size:12px;font-weight:500;margin-bottom:6px}
+.card .val{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.card .sub{font-size:12px;color:var(--muted);margin-top:4px}
+.pos{color:var(--green)}.neg{color:var(--red)}
+.grid2{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+@media (max-width:900px){.grid2{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:16px}
+.panel h2{font-size:14px;margin:0 0 12px;font-weight:600}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;padding:6px 6px;border-bottom:1px solid var(--line)}
+td{padding:3px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
+td input,td select{width:100%;border:1px solid transparent;background:transparent;color:var(--ink);font:inherit;padding:6px;border-radius:6px}
+td input:hover,td select:hover{border-color:var(--line)}
+td input:focus,td select:focus{outline:none;border-color:var(--acc);background:var(--card)}
+td input[type=number]{text-align:right;font-variant-numeric:tabular-nums}
+td input[type=checkbox]{width:16px;height:16px;cursor:pointer}
+tr.r td:first-child{box-shadow:inset 3px 0 var(--green)}
+tr.d td:first-child{box-shadow:inset 3px 0 var(--red)}
+.empty{color:var(--muted);text-align:center;padding:24px}
+.catrow{margin-bottom:10px}
+.catrow .top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px}
+.track{height:8px;background:var(--bg);border-radius:4px;overflow:hidden}
+.fill{height:100%;background:var(--acc);border-radius:4px}
+.filters{display:flex;gap:8px;flex-wrap:wrap}
+.filters select,.filters input{border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;padding:7px 10px;border-radius:8px}
+.year td,.year th{text-align:right;font-variant-numeric:tabular-nums;padding:6px}
+.year td:first-child,.year th:first-child{text-align:left}
+.year tr.cur td{background:var(--acc-soft);font-weight:600}
+/* agenda */
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal .dow{font-size:11px;color:var(--muted);text-align:center;font-weight:600;padding:4px 0;text-transform:uppercase}
+.day{min-height:92px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px;cursor:pointer;display:flex;flex-direction:column;gap:3px;overflow:hidden}
+.day:hover{border-color:var(--acc)}
+.day.out{opacity:.4}
+.day.today .n{background:var(--acc);color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center}
+.day.sel{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc-soft)}
+.day .n{font-size:12px;font-weight:600}
+.chip{font-size:11px;padding:2px 5px;border-radius:4px;background:var(--acc-soft);color:var(--acc);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip.bill{background:var(--red-soft);color:var(--red)}
+.chip.paid{background:var(--green-soft);color:var(--green);text-decoration:line-through}
+.chip.more{background:none;color:var(--muted)}
+.evt{display:grid;grid-template-columns:90px 1fr auto;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.evt input,.evt textarea,.form input,.form textarea,.form select{border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;padding:7px;border-radius:6px;width:100%}
+.evt textarea{grid-column:1/-1;resize:vertical;min-height:34px;font-size:13px}
+.form{display:grid;gap:8px;margin-top:12px}
+.form .row{display:grid;grid-template-columns:110px 1fr;gap:8px}
+.up{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);align-items:flex-start}
+.up .dt{min-width:52px;text-align:center;background:var(--bg);border-radius:8px;padding:4px}
+.up .dt b{display:block;font-size:16px}
+.up .dt span{font-size:11px;color:var(--muted);text-transform:uppercase}
+.up .tx{flex:1}
+.up .tx small{color:var(--muted)}
+.tag{font-size:11px;padding:1px 6px;border-radius:4px;background:var(--red-soft);color:var(--red);margin-left:4px}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
+.modal.on{display:flex}
+.modal .box{background:var(--card);border-radius:var(--r);padding:20px;max-width:520px;width:100%;max-height:85vh;overflow:auto}
+.modal textarea{width:100%;min-height:200px;font-family:ui-monospace,monospace;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--bg);color:var(--ink)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:30}
+.toast.on{opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <h1>Meu Painel</h1>
+  <div class="tabs">
+    <button data-tab="fin" class="on">💰 Financeiro</button>
+    <button data-tab="ag">📅 Agenda</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px"><span class="status" id="status">Carregando…</span><button class="btn sm" id="ghBtn">☁ GitHub</button></div>
+</header>
+
+<main>
+<!-- FINANCEIRO -->
+<section class="view on" id="v-fin">
+  <div class="bar">
+    <button class="btn" id="fPrev">‹</button>
+    <div class="month" id="fMonth"></div>
+    <button class="btn" id="fNext">›</button>
+    <button class="btn sm" id="fToday">Mês atual</button>
+    <span class="spacer"></span>
+    <button class="btn" id="copyFixed" title="Copia as despesas e receitas marcadas como fixas do mês anterior">↻ Trazer fixos do mês anterior</button>
+    <button class="btn" id="exportBtn">Exportar / Importar</button>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="lbl">Receitas</div><div class="val pos" id="kRec">—</div><div class="sub" id="kRecSub"></div></div>
+    <div class="card"><div class="lbl">Despesas</div><div class="val neg" id="kDes">—</div><div class="sub" id="kDesSub"></div></div>
+    <div class="card"><div class="lbl">Saldo do mês</div><div class="val" id="kSal">—</div><div class="sub" id="kSalSub"></div></div>
+    <div class="card"><div class="lbl">A pagar (em aberto)</div><div class="val" id="kAbe">—</div><div class="sub" id="kAbeSub"></div></div>
+  </div>
+
+  <div class="grid2">
+    <div>
+      <div class="panel">
+        <div class="bar" style="margin-bottom:10px">
+          <h2 style="margin:0">Lançamentos</h2>
+          <span class="spacer"></span>
+          <div class="filters">
+            <select id="fTipo"><option value="">Todos</option><option value="r">Receitas</option><option value="d">Despesas</option></select>
+            <input id="fBusca" placeholder="Buscar…" style="width:130px">
+          </div>
+          <button class="btn sm" id="addRec">+ Receita</button>
+          <button class="btn sm pri" id="addDes">+ Despesa</button>
+        </div>
+        <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th style="width:120px">Data</th><th>Descrição</th><th style="width:140px">Categoria</th><th style="width:110px;text-align:right">Valor (R$)</th><th style="width:50px">Pago</th><th style="width:50px">Fixo</th><th style="width:30px"></th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="panel">
+        <h2>Despesas por categoria</h2>
+        <div id="cats"></div>
+      </div>
+      <div class="panel">
+        <h2>Categorias</h2>
+        <div id="catList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+        <div style="display:flex;gap:6px"><input id="newCat" placeholder="Nova categoria" style="flex:1;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;padding:7px;border-radius:6px"><button class="btn sm" id="addCat">Adicionar</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 id="yearTitle">Resumo do ano</h2>
+    <div style="overflow-x:auto"><table class="year"><thead><tr><th>Mês</th><th>Receitas</th><th>Despesas</th><th>Saldo</th><th>Acumulado</th></tr></thead><tbody id="yearBody"></tbody></table></div>
+  </div>
+</section>
+
+<!-- AGENDA -->
+<section class="view" id="v-ag">
+  <div class="bar">
+    <button class="btn" id="aPrev">‹</button>
+    <div class="month" id="aMonth"></div>
+    <button class="btn" id="aNext">›</button>
+    <button class="btn sm" id="aToday">Hoje</button>
+    <span class="spacer"></span>
+    <label class="status"><input type="checkbox" id="showBills" checked> Mostrar contas a pagar no calendário</label>
+  </div>
+  <div class="grid2">
+    <div class="panel">
+      <div class="cal" id="cal"></div>
+    </div>
+    <div>
+      <div class="panel">
+        <h2 id="dayTitle">Dia</h2>
+        <div id="dayList"></div>
+        <form class="form" id="evtForm">
+          <div class="row"><input type="time" id="eHora"><input id="eTit" placeholder="Novo compromisso…" required></div>
+          <textarea id="eNota" placeholder="Anotação (opcional)" rows="2"></textarea>
+          <button class="btn pri" type="submit">Adicionar compromisso</button>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>Próximos 14 dias</h2>
+        <div id="upcoming"></div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<div class="modal" id="modal"><div class="box">
+  <div class="bar" style="margin-bottom:12px"><h2 style="margin:0;font-size:16px">Exportar / Importar</h2><span class="spacer"></span>
+    <div class="tabs"><button id="mtExp" class="on">Exportar</button><button id="mtImp">Importar</button></div></div>
+
+  <div id="mExp">
+    <p class="status" style="margin-top:0">Gere o conteúdo, clique em Copiar e cole no Excel ou num bloco de notas.</p>
+    <div class="bar"><button class="btn" id="mCsv">CSV do mês</button><button class="btn" id="mCsvAll">CSV de tudo</button><button class="btn" id="mJson">Backup completo (JSON)</button></div>
+    <textarea id="mOut" readonly></textarea>
+    <div class="bar" style="margin-top:10px"><button class="btn pri" id="mCopy">Copiar</button></div>
+  </div>
+
+  <div id="mImpBox" style="display:none">
+    <p class="status" style="margin-top:0">Escolha um arquivo <b>.csv</b> ou <b>.json</b>, ou cole o conteúdo abaixo. O formato é detectado sozinho.<br>
+    CSV: colunas <code>Data; Tipo; Descrição; Categoria; Valor; Pago; Fixo</code> — separador <code>;</code> ou <code>,</code>, data <code>dd/mm/aaaa</code> ou <code>aaaa-mm-dd</code>. Sem coluna Tipo, valor negativo vira despesa e positivo vira receita.</p>
+    <div class="bar"><input type="file" id="mFile" accept=".csv,.json,.txt,text/csv,application/json"></div>
+    <textarea id="mIn" placeholder="Data;Tipo;Descrição;Categoria;Valor;Pago;Fixo&#10;05/11/2026;Despesa;Aluguel;Moradia;1500,00;Sim;Sim"></textarea>
+    <label class="status" style="display:block;margin-top:8px"><input type="checkbox" id="mReplace"> Substituir todos os dados atuais (em vez de somar aos existentes)</label>
+    <div id="mMsg" class="status" style="margin-top:8px;min-height:18px"></div>
+    <div class="bar" style="margin-top:6px"><button class="btn pri" id="mImport">Importar</button><button class="btn" id="mConfirm" style="display:none;border-color:var(--red);color:var(--red)">Confirmar substituição</button></div>
+  </div>
+
+  <div class="bar" style="margin-top:10px"><span class="spacer"></span><button class="btn" id="mClose">Fechar</button></div>
+</div></div>
+<div class="modal" id="ghModal"><div class="box">
+  <h2 style="margin-top:0;font-size:16px">☁ Sincronizar com o GitHub</h2>
+  <p class="status" style="margin-top:0">Os dados são salvos num arquivo JSON dentro de um <b>repositório privado</b> seu. O token fica guardado só neste navegador, então é preciso conectar uma vez em cada aparelho.</p>
+  <details style="margin-bottom:12px"><summary style="cursor:pointer;font-weight:600">Como criar o token (2 min)</summary>
+  <ol class="status" style="padding-left:18px;line-height:1.6">
+    <li>Crie um repositório <b>privado</b>, por exemplo <code>painel-dados</code> (pode marcar “Add a README”).</li>
+    <li>Abra <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a> (token <i>fine-grained</i>).</li>
+    <li>Em <b>Repository access</b>, escolha <i>Only select repositories</i> e marque só o <code>painel-dados</code>.</li>
+    <li>Em <b>Permissions → Repository permissions → Contents</b>, escolha <i>Read and write</i>.</li>
+    <li>Gere o token, copie e cole abaixo.</li>
+  </ol></details>
+  <div class="form" style="margin-top:0">
+    <div class="row"><label class="status">Usuário</label><input id="gOwner"></div>
+    <div class="row"><label class="status">Repositório</label><input id="gRepo"></div>
+    <div class="row"><label class="status">Branch</label><input id="gBranch" placeholder="(padrão do repositório)"></div>
+    <div class="row"><label class="status">Arquivo</label><input id="gPath"></div>
+    <div class="row"><label class="status">Token</label><input id="gToken" type="password" placeholder="github_pat_…" autocomplete="off"></div>
+  </div>
+  <div id="gMsg" class="status" style="margin-top:10px;min-height:18px"></div>
+  <div class="bar" style="margin-top:10px"><button class="btn pri" id="gConnect">Testar e conectar</button><button class="btn" id="gDisc" style="display:none">Desconectar este aparelho</button><span class="spacer"></span><button class="btn" id="gClose">Fechar</button></div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const BRL=v=>(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
+const pad=n=>String(n).padStart(2,'0');
+const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const ym=d=>d.getFullYear()+'-'+pad(d.getMonth()+1);
+const MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const DOW=['dom','seg','ter','qua','qui','sex','sáb'];
+const LSKEY='meu-painel-v1';
+
+const DEFAULT_CATS=['Salário','Renda extra','Moradia','Alimentação','Transporte','Saúde','Educação','Lazer','Assinaturas','Contas (luz/água/net)','Cartão de crédito','Investimentos','Outros'];
+let state={lanc:[],eventos:[],cats:DEFAULT_CATS.slice()};
+let today=new Date();
+let fCur=new Date(today.getFullYear(),today.getMonth(),1);
+let aCur=new Date(today.getFullYear(),today.getMonth(),1);
+let selDay=ymd(today);
+
+/* ---------- persistência ---------- */
+let dbRef=null, saveTimer=null, pending=false;
+function setStatus(t){$('#status').textContent=t}
+const hhmm=()=>new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+function lsLoad(){try{const r=localStorage.getItem(LSKEY);return r?JSON.parse(r):null}catch(e){return null}}
+function lsSave(){try{localStorage.setItem(LSKEY,JSON.stringify(state))}catch(e){}}
+function normalize(s){
+  if(!s||typeof s!=='object')return;
+  state.lanc=Array.isArray(s.lanc)?s.lanc:[];
+  state.eventos=Array.isArray(s.eventos)?s.eventos:[];
+  state.cats=Array.isArray(s.cats)&&s.cats.length?s.cats:DEFAULT_CATS.slice();
+}
+function mergeStates(a,b){
+  const u=(x,y)=>{const m=new Map();(x||[]).forEach(i=>m.set(i.id,i));(y||[]).forEach(i=>{if(!m.has(i.id))m.set(i.id,i)});return [...m.values()]};
+  return {lanc:u(a.lanc,b.lanc),eventos:u(a.eventos,b.eventos),cats:[...new Set([...(a.cats||[]),...(b.cats||[])])]};
+}
+
+/* ---------- GitHub (repositório privado) ---------- */
+const GHKEY='meu-painel-github';
+let gh=null, ghSha=null, ghBusy=false, ghAgain=false;
+function ghCfgLoad(){try{return JSON.parse(localStorage.getItem(GHKEY)||'null')}catch(e){return null}}
+function ghCfgSave(c){try{c?localStorage.setItem(GHKEY,JSON.stringify(c)):localStorage.removeItem(GHKEY)}catch(e){}}
+const b64e=s=>{const b=new TextEncoder().encode(s);let bin='';for(let i=0;i<b.length;i+=0x8000)bin+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(bin)};
+const b64d=s=>new TextDecoder().decode(Uint8Array.from(atob(String(s).replace(/\s/g,'')),c=>c.charCodeAt(0)));
+const ghHeaders=c=>({Authorization:'Bearer '+c.token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'});
+const ghFileUrl=c=>`https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}/contents/${c.path.split('/').map(encodeURIComponent).join('/')}`;
+async function ghFetch(url,opt){
+  try{return await fetch(url,opt)}
+  catch(e){throw new Error('sem conexão com o GitHub')}
+}
+async function ghPull(c){
+  const r=await ghFetch(ghFileUrl(c)+'?ref='+encodeURIComponent(c.branch)+'&t='+Date.now(),{headers:ghHeaders(c),cache:'no-store'});
+  if(r.status===404)return {data:null,sha:null};
+  if(r.status===401)throw new Error('token inválido ou expirado');
+  if(r.status===403)throw new Error('token sem permissão neste repositório');
+  if(!r.ok)throw new Error('GitHub respondeu '+r.status);
+  const j=await r.json();
+  let data=null;try{data=JSON.parse(b64d(j.content||'')||'null')}catch(e){throw new Error('o arquivo '+c.path+' no GitHub não é um JSON válido')}
+  return {data,sha:j.sha};
+}
+async function ghPush(){
+  if(!gh)return;
+  if(ghBusy){ghAgain=true;return}
+  ghBusy=true;ghAgain=false;pending=false;setStatus('Enviando ao GitHub…');
+  try{
+    const json=JSON.stringify(state,null,1);
+    const body={message:'Atualiza dados do painel — '+new Date().toLocaleString('pt-BR'),content:b64e(json),branch:gh.branch};
+    if(ghSha)body.sha=ghSha;
+    const put=()=>ghFetch(ghFileUrl(gh),{method:'PUT',headers:{...ghHeaders(gh),'Content-Type':'application/json'},body:JSON.stringify(body),keepalive:json.length<45000});
+    let r=await put();
+    if(r.status===409||r.status===422){const p=await ghPull(gh);ghSha=p.sha;if(ghSha)body.sha=ghSha;else delete body.sha;r=await put()}
+    if(!r.ok)throw new Error(r.status===401?'token inválido ou expirado':(r.status===403||r.status===404)?'token sem permissão de escrita':'erro '+r.status);
+    const j=await r.json();ghSha=j.content&&j.content.sha;
+    setStatus('✓ Salvo no GitHub · '+hhmm());
+  }catch(e){pending=true;setStatus('⚠ Não salvou no GitHub ('+e.message+'). Está guardado neste navegador.')}
+  ghBusy=false;
+  if(ghAgain)ghPush();
+}
+async function ghRefresh(){
+  if(!gh||pending||ghBusy)return;
+  try{const p=await ghPull(gh);if(p.sha&&p.sha!==ghSha&&p.data){ghSha=p.sha;normalize(p.data);lsSave();renderAll();setStatus('✓ Atualizado do GitHub · '+hhmm())}}catch(e){}
+}
+document.addEventListener('visibilitychange',()=>{
+  if(!gh)return;
+  if(document.visibilityState==='hidden'&&pending){clearTimeout(saveTimer);ghPush()}
+  else if(document.visibilityState==='visible')ghRefresh();
+});
+window.addEventListener('beforeunload',e=>{if(gh&&(pending||ghBusy)){clearTimeout(saveTimer);ghPush();e.preventDefault();e.returnValue=''}});
+
+function save(){
+  lsSave();pending=true;
+  clearTimeout(saveTimer);
+  setStatus(gh?'Alterações pendentes…':'Salvando…');
+  saveTimer=setTimeout(async()=>{
+    if(gh){ghPush();return}
+    pending=false;
+    if(dbRef){
+      try{await dbRef.set({json:JSON.stringify(state),updated:new Date().toISOString()});setStatus('✓ Salvo na nuvem')}
+      catch(e){setStatus('Salvo só neste navegador')}
+    }else setStatus('Salvo neste navegador · use ☁ GitHub para sincronizar');
+  },gh?2500:700);
+}
+async function initStore(){
+  const local=lsLoad(); if(local)normalize(local);
+  renderAll();
+  gh=ghCfgLoad();
+  if(gh&&gh.token){
+    setStatus('Conectando ao GitHub…');
+    try{
+      const p=await ghPull(gh);ghSha=p.sha;
+      if(p.data){normalize(p.data);lsSave();renderAll();setStatus('✓ Sincronizado com o GitHub')}
+      else ghPush();
+    }catch(e){setStatus('⚠ GitHub: '+e.message+'. Usando os dados deste navegador.')}
+    return;
+  }
+  gh=null;
+  const LOCALMSG='Salvo neste navegador · use ☁ GitHub para sincronizar';
+  let timer=setTimeout(()=>{if(!dbRef)setStatus(LOCALMSG)},10000);
+  try{
+    if(!window.claude||!window.claude.use){clearTimeout(timer);setStatus(LOCALMSG);return}
+    const [db,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
+    if(!db||!user){clearTimeout(timer);setStatus(LOCALMSG);return}
+    const id=await user.id();
+    const ref=db.collection('data/users/'+id).doc('painel');
+    const snap=await ref.get();
+    let d=snap&&typeof snap.data==='function'?snap.data():snap;
+    clearTimeout(timer);
+    dbRef=ref;
+    if(d&&d.json){normalize(JSON.parse(d.json));lsSave();renderAll();setStatus('✓ Sincronizado')}
+    else if(local&&(local.lanc?.length||local.eventos?.length)){save()}
+    else setStatus('✓ Pronto — salva automaticamente');
+  }catch(e){clearTimeout(timer);setStatus(LOCALMSG)}
+}
+
+/* ---------- tela de configuração do GitHub ---------- */
+function ghFillForm(){
+  const c=gh||ghCfgLoad()||{};
+  $('#gOwner').value=c.owner||'RuandGarcia';$('#gRepo').value=c.repo||'painel-dados';
+  $('#gBranch').value=c.branch||'';$('#gPath').value=c.path||'dados.json';$('#gToken').value=c.token||'';
+  $('#gDisc').style.display=gh?'':'none';
+  $('#gMsg').innerHTML=gh?`<span class="pos">✓ Conectado a <b>${esc(gh.owner+'/'+gh.repo)}</b> (${esc(gh.path)})</span>`:'';
+}
+$('#ghBtn').onclick=()=>{ghFillForm();$('#ghModal').classList.add('on')};
+$('#gClose').onclick=()=>$('#ghModal').classList.remove('on');
+$('#gDisc').onclick=()=>{gh=null;ghSha=null;ghCfgSave(null);ghFillForm();setStatus('Desconectado do GitHub · salvo neste navegador');toast('GitHub desconectado neste aparelho')};
+$('#gConnect').onclick=async()=>{
+  const msg=$('#gMsg');
+  const c={owner:$('#gOwner').value.trim(),repo:$('#gRepo').value.trim(),branch:$('#gBranch').value.trim(),path:$('#gPath').value.trim()||'dados.json',token:$('#gToken').value.trim()};
+  if(!c.owner||!c.repo||!c.token){msg.innerHTML='<span class="neg">Preencha usuário, repositório e token.</span>';return}
+  msg.textContent='Testando a conexão…';
+  try{
+    const rr=await ghFetch(`https://api.github.com/repos/${encodeURIComponent(c.owner)}/${encodeURIComponent(c.repo)}`,{headers:ghHeaders(c),cache:'no-store'});
+    if(rr.status===401)throw new Error('Token inválido ou expirado.');
+    if(rr.status===404)throw new Error('Repositório não encontrado, ou o token não tem acesso a ele. Confira o nome e se o token inclui esse repositório.');
+    if(!rr.ok)throw new Error('GitHub respondeu '+rr.status+'.');
+    const rj=await rr.json();
+    if(!rj.private)throw new Error('Esse repositório é PÚBLICO: qualquer pessoa veria seus dados financeiros. Use um repositório privado.');
+    if(!c.branch)c.branch=rj.default_branch||'main';
+    const p=await ghPull(c);
+    let merged=state;
+    if(p.data)merged=mergeStates(p.data,state);
+    gh=c;ghSha=p.sha;ghCfgSave(c);
+    normalize(merged);lsSave();renderAll();
+    await ghPush();
+    if(/⚠/.test($('#status').textContent))throw new Error('Conectou, mas não consegui gravar. O token precisa da permissão Contents: Read and write.');
+    ghFillForm();
+    msg.innerHTML=`<span class="pos">✓ Conectado! ${p.data?'Os dados do GitHub foram juntados com os deste navegador.':'Arquivo '+esc(c.path)+' criado no repositório.'}</span>`;
+  }catch(e){
+    if(gh===c){gh=null;ghSha=null;ghCfgSave(null);setStatus('Salvo neste navegador · use ☁ GitHub para sincronizar')}
+    msg.innerHTML='<span class="neg">⚠ '+esc(e.message==='sem conexão com o GitHub'?'Não consegui falar com o GitHub. Se você está abrindo pelo link do Claude, isso só funciona na versão do GitHub Pages.':e.message)+'</span>';
+  }
+};
+
+function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('on');setTimeout(()=>el.classList.remove('on'),1800)}
+
+/* ---------- tabs ---------- */
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+b.dataset.tab));
+  location.hash=b.dataset.tab==='ag'?'agenda':'financeiro';
+});
+if(location.hash==='#agenda')document.querySelector('[data-tab=ag]').click();
+
+/* ---------- financeiro ---------- */
+function monthItems(d){const k=ym(d);return state.lanc.filter(l=>(l.data||'').startsWith(k))}
+function totals(items){let r=0,d=0,ab=0,nab=0;items.forEach(l=>{const v=+l.valor||0;if(l.tipo==='r')r+=v;else{d+=v;if(!l.pago){ab+=v;nab++}}});return{r,d,s:r-d,ab,nab}}
+
+function renderFin(){
+  $('#fMonth').textContent=MESES[fCur.getMonth()]+' '+fCur.getFullYear();
+  const items=monthItems(fCur);
+  const t=totals(items);
+  $('#kRec').textContent=BRL(t.r);$('#kRecSub').textContent=items.filter(l=>l.tipo==='r').length+' lançamento(s)';
+  $('#kDes').textContent=BRL(t.d);$('#kDesSub').textContent=items.filter(l=>l.tipo!=='r').length+' lançamento(s)';
+  const ks=$('#kSal');ks.textContent=BRL(t.s);ks.className='val '+(t.s>=0?'pos':'neg');
+  $('#kSalSub').textContent=t.r?Math.round(t.s/t.r*100)+'% da receita':'';
+  $('#kAbe').textContent=BRL(t.ab);$('#kAbeSub').textContent=t.nab+' conta(s) não paga(s)';
+  renderTable(items);renderCats(items);renderCatList();renderYear();
+}
+
+function renderTable(items){
+  const tipo=$('#fTipo').value, q=$('#fBusca').value.trim().toLowerCase();
+  let rows=items.filter(l=>(!tipo||l.tipo===tipo)&&(!q||(l.desc||'').toLowerCase().includes(q)||(l.cat||'').toLowerCase().includes(q)));
+  rows.sort((a,b)=>(a.data||'').localeCompare(b.data||'')||(a.tipo===b.tipo?0:a.tipo==='r'?-1:1));
+  const tb=$('#tbody');
+  if(!rows.length){tb.innerHTML='<tr><td colspan="7" class="empty">Nenhum lançamento neste mês. Use “+ Despesa” ou “+ Receita”.</td></tr>';return}
+  tb.innerHTML='';
+  rows.forEach(l=>{
+    const tr=document.createElement('tr');tr.className=l.tipo;
+    const opts=state.cats.map(c=>`<option ${c===l.cat?'selected':''}>${esc(c)}</option>`).join('')+(l.cat&&!state.cats.includes(l.cat)?`<option selected>${esc(l.cat)}</option>`:'');
+    tr.innerHTML=`<td><input type="date" data-f="data" value="${l.data||''}"></td>
+      <td><input data-f="desc" value="${esc(l.desc||'')}" placeholder="${l.tipo==='r'?'Ex.: Salário':'Ex.: Aluguel'}"></td>
+      <td><select data-f="cat">${opts}</select></td>
+      <td><input type="number" step="0.01" min="0" data-f="valor" value="${l.valor??''}" class="${l.tipo==='r'?'pos':'neg'}"></td>
+      <td style="text-align:center"><input type="checkbox" data-f="pago" ${l.pago?'checked':''} title="${l.tipo==='r'?'Recebido':'Pago'}"></td>
+      <td style="text-align:center"><input type="checkbox" data-f="fixo" ${l.fixo?'checked':''} title="Repete todo mês"></td>
+      <td><button class="btn ghost sm" title="Excluir">✕</button></td>`;
+    tr.querySelectorAll('[data-f]').forEach(inp=>{
+      inp.addEventListener('change',()=>{
+        const f=inp.dataset.f;
+        l[f]=inp.type==='checkbox'?inp.checked:inp.type==='number'?(parseFloat(inp.value)||0):inp.value;
+        save();
+        if(f==='data'&&!(l.data||'').startsWith(ym(fCur))){toast('Lançamento movido para outro mês')}
+        renderFin();renderAg();
+      });
+    });
+    tr.querySelector('button').onclick=()=>{state.lanc=state.lanc.filter(x=>x!==l);save();renderFin();renderAg();toast('Lançamento excluído')};
+    tb.appendChild(tr);
+  });
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+function addLanc(tipo){
+  const isCur=ym(fCur)===ym(today);
+  const d=isCur?ymd(today):ym(fCur)+'-01';
+  const l={id:uid(),data:d,desc:'',cat:tipo==='r'?'Salário':'Outros',tipo,valor:0,pago:false,fixo:false};
+  state.lanc.push(l);save();$('#fTipo').value='';$('#fBusca').value='';renderFin();
+  const inputs=[...document.querySelectorAll('#tbody tr')];
+  const row=inputs.find(tr=>tr.querySelector('[data-f=desc]')&&tr.querySelector('[data-f=desc]').value===''&&tr.className===tipo);
+  if(row)row.querySelector('[data-f=desc]').focus();
+}
+$('#addRec').onclick=()=>addLanc('r');
+$('#addDes').onclick=()=>addLanc('d');
+$('#fTipo').onchange=renderFin;$('#fBusca').oninput=()=>renderTable(monthItems(fCur));
+$('#fPrev').onclick=()=>{fCur=new Date(fCur.getFullYear(),fCur.getMonth()-1,1);renderFin()};
+$('#fNext').onclick=()=>{fCur=new Date(fCur.getFullYear(),fCur.getMonth()+1,1);renderFin()};
+$('#fToday').onclick=()=>{fCur=new Date(today.getFullYear(),today.getMonth(),1);renderFin()};
+
+$('#copyFixed').onclick=()=>{
+  const prev=new Date(fCur.getFullYear(),fCur.getMonth()-1,1);
+  const fixos=monthItems(prev).filter(l=>l.fixo);
+  if(!fixos.length){toast('Nenhum lançamento “Fixo” no mês anterior');return}
+  const cur=monthItems(fCur);let n=0;
+  const last=new Date(fCur.getFullYear(),fCur.getMonth()+1,0).getDate();
+  fixos.forEach(f=>{
+    if(cur.some(c=>c.fixo&&c.desc===f.desc&&c.tipo===f.tipo))return;
+    const day=Math.min(parseInt((f.data||'').slice(8))||1,last);
+    state.lanc.push({...f,id:uid(),data:ym(fCur)+'-'+pad(day),pago:false});n++;
+  });
+  save();renderFin();renderAg();toast(n?n+' lançamento(s) fixo(s) copiados':'Os fixos já estão neste mês');
+};
+
+function renderCats(items){
+  const m={};items.filter(l=>l.tipo!=='r').forEach(l=>{m[l.cat||'Outros']=(m[l.cat||'Outros']||0)+(+l.valor||0)});
+  const arr=Object.entries(m).filter(e=>e[1]>0).sort((a,b)=>b[1]-a[1]);
+  const tot=arr.reduce((s,e)=>s+e[1],0);
+  $('#cats').innerHTML=arr.length?arr.map(([c,v])=>`<div class="catrow"><div class="top"><span>${esc(c)}</span><span><b>${BRL(v)}</b> <span class="status">${Math.round(v/tot*100)}%</span></span></div><div class="track"><div class="fill" style="width:${v/arr[0][1]*100}%"></div></div></div>`).join(''):'<div class="empty">Sem despesas neste mês</div>';
+}
+function renderCatList(){
+  $('#catList').innerHTML=state.cats.map((c,i)=>`<span class="chip" style="display:inline-flex;gap:4px;align-items:center;font-size:12px;padding:4px 8px">${esc(c)}<a data-i="${i}" style="cursor:pointer;opacity:.6" title="Remover">✕</a></span>`).join('');
+  $('#catList').querySelectorAll('a').forEach(a=>a.onclick=()=>{state.cats.splice(+a.dataset.i,1);save();renderFin()});
+}
+$('#addCat').onclick=()=>{const v=$('#newCat').value.trim();if(v&&!state.cats.includes(v)){state.cats.push(v);$('#newCat').value='';save();renderFin()}};
+$('#newCat').onkeydown=e=>{if(e.key==='Enter')$('#addCat').click()};
+
+function renderYear(){
+  const y=fCur.getFullYear();$('#yearTitle').textContent='Resumo de '+y;
+  let acc=0,html='',TR=0,TD=0;
+  for(let m=0;m<12;m++){
+    const t=totals(monthItems(new Date(y,m,1)));acc+=t.s;TR+=t.r;TD+=t.d;
+    const has=t.r||t.d;
+    html+=`<tr class="${m===fCur.getMonth()?'cur':''}" style="cursor:pointer" data-m="${m}"><td style="text-transform:capitalize">${MESES[m]}</td><td class="pos">${has?BRL(t.r):'—'}</td><td class="neg">${has?BRL(t.d):'—'}</td><td class="${t.s>=0?'pos':'neg'}">${has?BRL(t.s):'—'}</td><td>${has?BRL(acc):'—'}</td></tr>`;
+  }
+  html+=`<tr style="font-weight:700"><td>Total</td><td class="pos">${BRL(TR)}</td><td class="neg">${BRL(TD)}</td><td class="${TR-TD>=0?'pos':'neg'}">${BRL(TR-TD)}</td><td></td></tr>`;
+  $('#yearBody').innerHTML=html;
+  $('#yearBody').querySelectorAll('tr[data-m]').forEach(tr=>tr.onclick=()=>{fCur=new Date(y,+tr.dataset.m,1);renderFin();window.scrollTo({top:0,behavior:'smooth'})});
+}
+
+/* ---------- export / import ---------- */
+function mTab(imp){
+  $('#mtExp').classList.toggle('on',!imp);$('#mtImp').classList.toggle('on',imp);
+  $('#mExp').style.display=imp?'none':'';$('#mImpBox').style.display=imp?'':'none';
+  $('#mMsg').textContent='';$('#mConfirm').style.display='none';
+}
+$('#mtExp').onclick=()=>mTab(false);$('#mtImp').onclick=()=>mTab(true);
+$('#exportBtn').onclick=()=>{$('#modal').classList.add('on');mTab(false);$('#mCsv').click()};
+$('#mClose').onclick=()=>$('#modal').classList.remove('on');
+
+function toCsv(rows){
+  const q=x=>{x=String(x??'');return /[;"\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x};
+  const br=d=>d&&d.length===10?d.slice(8)+'/'+d.slice(5,7)+'/'+d.slice(0,4):(d||'');
+  return 'Data;Tipo;Descrição;Categoria;Valor;Pago;Fixo\n'+rows.map(l=>[br(l.data),l.tipo==='r'?'Receita':'Despesa',l.desc,l.cat,(+l.valor||0).toFixed(2).replace('.',','),l.pago?'Sim':'Não',l.fixo?'Sim':'Não'].map(q).join(';')).join('\n');
+}
+const byDate=(a,b)=>(a.data||'').localeCompare(b.data||'');
+$('#mCsv').onclick=()=>{$('#mOut').value=toCsv(monthItems(fCur).sort(byDate))};
+$('#mCsvAll').onclick=()=>{$('#mOut').value=toCsv(state.lanc.slice().sort(byDate))};
+$('#mJson').onclick=()=>{$('#mOut').value=JSON.stringify(state,null,1)};
+$('#mCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('#mOut').value);toast('Copiado!')}catch(e){$('#mOut').select();toast('Selecione e copie com Ctrl+C')}};
+
+$('#mFile').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const buf=await f.arrayBuffer();
+    let txt=new TextDecoder('utf-8').decode(buf);
+    if(txt.includes('\uFFFD'))txt=new TextDecoder('windows-1252').decode(buf); // CSV salvo pelo Excel
+    $('#mIn').value=txt;$('#mMsg').textContent='Arquivo “'+f.name+'” carregado. Clique em Importar.';
+  }catch(err){$('#mMsg').textContent='Não consegui ler o arquivo.'}
+};
+
+/* parser CSV com suporte a aspas, ; ou , e quebras de linha */
+function parseCsv(txt){
+  txt=txt.replace(/^﻿/,'').replace(/\r\n?/g,'\n');
+  const first=txt.split('\n')[0];
+  const cnt=c=>(first.match(new RegExp('\\'+c,'g'))||[]).length;
+  const sep=[';','\t',','].sort((a,b)=>cnt(b)-cnt(a))[0];
+  const rows=[];let row=[],cur='',inQ=false;
+  for(let i=0;i<txt.length;i++){
+    const c=txt[i];
+    if(inQ){if(c==='"'){if(txt[i+1]==='"'){cur+='"';i++}else inQ=false}else cur+=c}
+    else if(c==='"')inQ=true;
+    else if(c===sep){row.push(cur);cur=''}
+    else if(c==='\n'){row.push(cur);rows.push(row);row=[];cur=''}
+    else cur+=c;
+  }
+  if(cur!==''||row.length){row.push(cur);rows.push(row)}
+  return rows.filter(r=>r.some(c=>c.trim()!==''));
+}
+const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+function parseDate(s){
+  s=String(s||'').trim();let m;
+  if(m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))return m[1]+'-'+pad(+m[2])+'-'+pad(+m[3]);
+  if(m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/)){let y=+m[3];if(y<100)y+=2000;return y+'-'+pad(+m[2])+'-'+pad(+m[1])}
+  return null;
+}
+function parseNum(s){
+  s=String(s||'').replace(/[R$\s ]/g,'');if(!s)return NaN;
+  let neg=false;if(/^\(.*\)$/.test(s)){neg=true;s=s.slice(1,-1)}
+  if(s.endsWith('-')){neg=true;s=s.slice(0,-1)}
+  const lc=s.lastIndexOf(','),ld=s.lastIndexOf('.');
+  if(lc>ld)s=s.replace(/\./g,'').replace(',','.');      // 1.234,56
+  else if(ld>lc&&lc>-1)s=s.replace(/,/g,'');              // 1,234.56
+  else if(ld>-1&&/^\-?\d{1,3}(\.\d{3})+$/.test(s))s=s.replace(/\./g,''); // 1.500
+  const v=parseFloat(s);return neg?-v:v;
+}
+const yes=s=>/^(s|sim|y|yes|x|1|true|pago|ok)$/.test(norm(s));
+function csvToLanc(txt){
+  const rows=parseCsv(txt);if(!rows.length)throw new Error('O CSV está vazio.');
+  const H=rows[0].map(norm);
+  const find=(...k)=>H.findIndex(h=>k.some(x=>h===x||h.startsWith(x)));
+  let ix={data:find('data','date','dt','vencimento'),tipo:find('tipo','type','natureza'),desc:find('descricao','desc','historico','lancamento','description','nome'),cat:find('categoria','category','cat'),valor:find('valor','value','amount','montante','quantia'),pago:find('pago','status','recebido','paid'),fixo:find('fixo','recorrente','fixed')};
+  let start=1;
+  if(ix.data<0&&ix.valor<0){ // sem cabeçalho: assume a ordem do export
+    if(!parseDate(rows[0][0]))throw new Error('Não encontrei as colunas Data e Valor no cabeçalho.');
+    ix={data:0,tipo:1,desc:2,cat:3,valor:4,pago:5,fixo:6};start=0;
+  }
+  if(ix.data<0)throw new Error('Falta a coluna “Data”.');
+  if(ix.valor<0)throw new Error('Falta a coluna “Valor”.');
+  const out=[],errs=[];
+  for(let i=start;i<rows.length;i++){
+    const r=rows[i],g=k=>ix[k]>=0?(r[ix[k]]||'').trim():'';
+    const d=parseDate(g('data')),v=parseNum(g('valor'));
+    if(!d||isNaN(v)){errs.push(i+1);continue}
+    const t=norm(g('tipo'));
+    let tipo=t?(/^(r|receita|entrada|credito|c|income)/.test(t)?'r':'d'):(v<0?'d':'r');
+    const cat=g('cat')||(tipo==='r'?'Renda extra':'Outros');
+    out.push({id:uid(),data:d,desc:g('desc'),cat,tipo,valor:Math.abs(v),pago:ix.pago>=0?yes(g('pago')):false,fixo:ix.fixo>=0?yes(g('fixo')):false});
+  }
+  return {out,errs};
+}
+
+let pendingReplace=null;
+function applyImport(s,label){
+  normalize(s);save();renderAll();$('#modal').classList.remove('on');toast(label);
+}
+$('#mImport').onclick=()=>{
+  const txt=$('#mIn').value.trim();const msg=$('#mMsg');$('#mConfirm').style.display='none';
+  if(!txt){msg.textContent='Cole um conteúdo ou escolha um arquivo primeiro.';return}
+  const replace=$('#mReplace').checked;
+  try{
+    if(txt[0]==='{'){
+      let s;try{s=JSON.parse(txt)}catch(e){throw new Error('O JSON está incompleto ou foi alterado. Copie o backup inteiro, de { até }.')}
+      if(!Array.isArray(s.lanc)&&!Array.isArray(s.eventos))throw new Error('Esse JSON não é um backup deste painel.');
+      if(replace){
+        pendingReplace={s,label:'Backup restaurado'};
+        msg.innerHTML=`Isso vai <b>apagar tudo</b> e restaurar ${s.lanc?.length||0} lançamento(s) e ${s.eventos?.length||0} compromisso(s).`;
+        $('#mConfirm').style.display='';return;
+      }
+      const ids=new Set(state.lanc.map(l=>l.id)),eids=new Set(state.eventos.map(e=>e.id));
+      const nl=(s.lanc||[]).filter(l=>!ids.has(l.id)),ne=(s.eventos||[]).filter(e=>!eids.has(e.id));
+      const cats=[...new Set([...state.cats,...(s.cats||[])])];
+      applyImport({lanc:[...state.lanc,...nl],eventos:[...state.eventos,...ne],cats},`${nl.length} lançamento(s) e ${ne.length} compromisso(s) importados`);
+    }else{
+      const {out,errs}=csvToLanc(txt);
+      if(!out.length)throw new Error('Nenhuma linha válida. Confira se as datas e os valores estão preenchidos.'+(errs.length?' Linhas com problema: '+errs.slice(0,10).join(', '):''));
+      const key=l=>l.data+'|'+l.tipo+'|'+norm(l.desc)+'|'+(+l.valor).toFixed(2);
+      const exist=new Set(replace?[]:state.lanc.map(key));
+      const nl=out.filter(l=>!exist.has(key(l)));const dup=out.length-nl.length;
+      const cats=[...new Set([...state.cats,...nl.map(l=>l.cat)])];
+      const label=`${nl.length} lançamento(s) importados`+(dup?` · ${dup} repetido(s) ignorado(s)`:'')+(errs.length?` · ${errs.length} linha(s) inválida(s)`:'');
+      if(replace){
+        pendingReplace={s:{lanc:nl,eventos:state.eventos,cats},label};
+        msg.innerHTML=`Isso vai <b>apagar todos os lançamentos</b> atuais e colocar ${nl.length} no lugar (a agenda é mantida).`;
+        $('#mConfirm').style.display='';return;
+      }
+      applyImport({lanc:[...state.lanc,...nl],eventos:state.eventos,cats},label);
+      if(nl.length){const f=nl.slice().sort(byDate).pop();const [y,m]=f.data.split('-').map(Number);fCur=new Date(y,m-1,1);renderFin()}
+    }
+  }catch(e){msg.innerHTML='<span class="neg">⚠ '+esc(e.message||'Não consegui importar.')+'</span>'}
+};
+$('#mConfirm').onclick=()=>{if(pendingReplace){applyImport(pendingReplace.s,pendingReplace.label);pendingReplace=null}};
+
+/* ---------- agenda ---------- */
+function eventsOn(d){return state.eventos.filter(e=>e.data===d).sort((a,b)=>(a.hora||'99').localeCompare(b.hora||'99'))}
+function billsOn(d){return $('#showBills').checked?state.lanc.filter(l=>l.tipo!=='r'&&l.data===d):[]}
+
+function renderAg(){
+  $('#aMonth').textContent=MESES[aCur.getMonth()]+' '+aCur.getFullYear();
+  const cal=$('#cal');cal.innerHTML=DOW.map(d=>`<div class="dow">${d}</div>`).join('');
+  const start=new Date(aCur.getFullYear(),aCur.getMonth(),1-aCur.getDay());
+  const tdy=ymd(new Date());
+  for(let i=0;i<42;i++){
+    const d=new Date(start.getFullYear(),start.getMonth(),start.getDate()+i);
+    if(i===35&&d.getMonth()!==aCur.getMonth())break;
+    const k=ymd(d);
+    const ev=eventsOn(k),bl=billsOn(k);
+    const chips=[...ev.map(e=>`<div class="chip">${e.hora?e.hora+' ':''}${esc(e.titulo)}</div>`),...bl.map(b=>`<div class="chip bill ${b.pago?'paid':''}">💸 ${esc(b.desc||b.cat)}</div>`)];
+    const shown=chips.slice(0,3).join('')+(chips.length>3?`<div class="chip more">+${chips.length-3}</div>`:'');
+    const el=document.createElement('div');
+    el.className='day'+(d.getMonth()!==aCur.getMonth()?' out':'')+(k===tdy?' today':'')+(k===selDay?' sel':'');
+    el.innerHTML=`<span class="n">${d.getDate()}</span>${shown}`;
+    el.onclick=()=>{selDay=k;if(d.getMonth()!==aCur.getMonth())aCur=new Date(d.getFullYear(),d.getMonth(),1);renderAg()};
+    cal.appendChild(el);
+  }
+  renderDay();renderUpcoming();
+}
+function renderDay(){
+  const [y,m,d]=selDay.split('-').map(Number);const dt=new Date(y,m-1,d);
+  $('#dayTitle').textContent=DOW[dt.getDay()]+', '+d+' de '+MESES[m-1];
+  const list=$('#dayList');list.innerHTML='';
+  const ev=eventsOn(selDay),bl=state.lanc.filter(l=>l.tipo!=='r'&&l.data===selDay);
+  if(!ev.length&&!bl.length)list.innerHTML='<div class="status" style="padding:6px 0">Nada marcado.</div>';
+  ev.forEach(e=>{
+    const row=document.createElement('div');row.className='evt';
+    row.innerHTML=`<input type="time" value="${e.hora||''}" data-f="hora"><input value="${esc(e.titulo)}" data-f="titulo"><button class="btn ghost sm" title="Excluir">✕</button><textarea data-f="nota" placeholder="Anotação" rows="1">${esc(e.nota||'')}</textarea>`;
+    row.querySelectorAll('[data-f]').forEach(inp=>inp.addEventListener('change',()=>{e[inp.dataset.f]=inp.value;save();renderAg()}));
+    row.querySelector('button').onclick=()=>{state.eventos=state.eventos.filter(x=>x!==e);save();renderAg()};
+    list.appendChild(row);
+  });
+  bl.forEach(b=>{
+    const row=document.createElement('div');row.className='up';
+    row.innerHTML=`<div class="tx">💸 <b>${esc(b.desc||b.cat)}</b> — ${BRL(+b.valor)} <br><label class="status"><input type="checkbox" ${b.pago?'checked':''}> ${b.pago?'Paga':'Marcar como paga'}</label></div>`;
+    row.querySelector('input').onchange=ev=>{b.pago=ev.target.checked;save();renderAg();renderFin()};
+    list.appendChild(row);
+  });
+}
+function renderUpcoming(){
+  const now=new Date();now.setHours(0,0,0,0);const out=[];
+  for(let i=0;i<14;i++){
+    const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+i),k=ymd(d);
+    eventsOn(k).forEach(e=>out.push({d,k,t:e.titulo,h:e.hora,n:e.nota}));
+    state.lanc.filter(l=>l.tipo!=='r'&&l.data===k&&!l.pago).forEach(b=>out.push({d,k,t:(b.desc||b.cat)+' — '+BRL(+b.valor),bill:true}));
+  }
+  $('#upcoming').innerHTML=out.length?out.map(o=>`<div class="up" style="cursor:pointer" data-k="${o.k}"><div class="dt"><b>${o.d.getDate()}</b><span>${DOW[o.d.getDay()]}</span></div><div class="tx">${o.h?`<small>${o.h}</small> `:''}${esc(o.t)}${o.bill?'<span class="tag">a pagar</span>':''}${o.n?`<br><small>${esc(o.n)}</small>`:''}</div></div>`).join(''):'<div class="status">Nada nos próximos 14 dias.</div>';
+  $('#upcoming').querySelectorAll('[data-k]').forEach(el=>el.onclick=()=>{selDay=el.dataset.k;const [y,m]=selDay.split('-').map(Number);aCur=new Date(y,m-1,1);renderAg()});
+}
+$('#evtForm').onsubmit=e=>{
+  e.preventDefault();const t=$('#eTit').value.trim();if(!t)return;
+  state.eventos.push({id:uid(),data:selDay,hora:$('#eHora').value,titulo:t,nota:$('#eNota').value.trim()});
+  $('#eTit').value='';$('#eNota').value='';$('#eHora').value='';save();renderAg();
+};
+$('#aPrev').onclick=()=>{aCur=new Date(aCur.getFullYear(),aCur.getMonth()-1,1);renderAg()};
+$('#aNext').onclick=()=>{aCur=new Date(aCur.getFullYear(),aCur.getMonth()+1,1);renderAg()};
+$('#aToday').onclick=()=>{const t=new Date();aCur=new Date(t.getFullYear(),t.getMonth(),1);selDay=ymd(t);renderAg()};
+$('#showBills').onchange=renderAg;
+
+function renderAll(){renderFin();renderAg()}
+initStore();
+})();
+</script>
+</body>
+</html>
