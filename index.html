@@ -225,11 +225,12 @@ tr.d td:first-child{box-shadow:inset 3px 0 var(--red)}
   </div>
 
   <div id="mImpBox" style="display:none">
-    <p class="status" style="margin-top:0">Escolha um arquivo <b>.csv</b> ou <b>.json</b>, ou cole o conteúdo abaixo. O formato é detectado sozinho.<br>
+    <p class="status" style="margin-top:0">Escolha um arquivo <b>.csv</b>, <b>.ofx</b> ou <b>.json</b>, ou cole o conteúdo abaixo. O formato é detectado sozinho.<br>
     CSV: colunas <code>Data; Tipo; Descrição; Categoria; Valor; Pago; Fixo</code> — separador <code>;</code> ou <code>,</code>, data <code>dd/mm/aaaa</code> ou <code>aaaa-mm-dd</code>. Sem coluna Tipo, valor negativo vira despesa e positivo vira receita. Linhas sem categoria são classificadas pelas <b>Regras automáticas</b>.</p>
-    <div class="bar"><input type="file" id="mFile" accept=".csv,.json,.txt,text/csv,application/json"></div>
+    <div class="bar"><input type="file" id="mFile" accept=".csv,.ofx,.json,.txt,text/csv,application/json"></div>
     <textarea id="mIn" placeholder="Data;Tipo;Descrição;Categoria;Valor;Pago;Fixo&#10;05/11/2026;Despesa;Aluguel;Moradia;1500,00;Sim;Sim"></textarea>
-    <label class="status" style="display:block;margin-top:8px"><input type="checkbox" id="mReplace"> Substituir todos os dados atuais (em vez de somar aos existentes)</label>
+    <label class="status" style="display:block;margin-top:8px"><input type="checkbox" id="mCard"> É fatura de cartão de crédito (compras vêm com valor positivo). A fatura do Nubank é detectada sozinha.</label>
+    <label class="status" style="display:block;margin-top:4px"><input type="checkbox" id="mReplace"> Substituir todos os dados atuais (em vez de somar aos existentes)</label>
     <div id="mMsg" class="status" style="margin-top:8px;min-height:18px"></div>
     <div class="bar" style="margin-top:6px"><button class="btn pri" id="mImport">Importar</button><button class="btn" id="mConfirm" style="display:none;border-color:var(--red);color:var(--red)">Confirmar substituição</button></div>
   </div>
@@ -673,7 +674,7 @@ function csvToLanc(txt){
   const rows=parseCsv(txt);if(!rows.length)throw new Error('O CSV está vazio.');
   const H=rows[0].map(norm);
   const find=(...k)=>H.findIndex(h=>k.some(x=>h===x||h.startsWith(x)));
-  let ix={data:find('data','date','dt','vencimento'),tipo:find('tipo','type','natureza'),desc:find('descricao','desc','historico','lancamento','description','nome'),cat:find('categoria','category','cat'),valor:find('valor','value','amount','montante','quantia'),pago:find('pago','status','recebido','paid'),fixo:find('fixo','recorrente','fixed')};
+  let ix={data:find('data','date','dt','vencimento'),tipo:find('tipo','type','natureza'),desc:find('descricao','desc','historico','lancamento','description','title','titulo','estabelecimento','memo','nome'),cat:find('categoria','category','cat'),valor:find('valor','value','amount','montante','quantia'),pago:find('pago','status','recebido','paid'),fixo:find('fixo','recorrente','fixed')};
   let start=1;
   if(ix.data<0&&ix.valor<0){ // sem cabeçalho: assume a ordem do export
     if(!parseDate(rows[0][0]))throw new Error('Não encontrei as colunas Data e Valor no cabeçalho.');
@@ -681,19 +682,45 @@ function csvToLanc(txt){
   }
   if(ix.data<0)throw new Error('Falta a coluna “Data”.');
   if(ix.valor<0)throw new Error('Falta a coluna “Valor”.');
-  const out=[],errs=[];
+  // Fatura do cartão Nubank (date,title,amount): compra vem positiva
+  const cartao=$('#mCard').checked||(H.includes('title')&&H.includes('amount')&&ix.tipo<0);
+  const ixId=find('identificador','id','fitid');
+  const out=[],errs=[];let skipped=0;
   for(let i=start;i<rows.length;i++){
     const r=rows[i],g=k=>ix[k]>=0?(r[ix[k]]||'').trim():'';
     const d=parseDate(g('data')),v=parseNum(g('valor'));
     if(!d||isNaN(v)){errs.push(i+1);continue}
+    if(cartao&&/pagamento recebido|pagamento da fatura|pagamento efetuado/.test(norm(g('desc')))){skipped++;continue}
     const t=norm(g('tipo'));
-    let tipo=t?(/^(r|receita|entrada|credito|c|income)/.test(t)?'r':'d'):(v<0?'d':'r');
+    let tipo=t?(/^(r|receita|entrada|credito|c|income)/.test(t)?'r':'d'):cartao?(v>0?'d':'r'):(v<0?'d':'r');
     const cat=g('cat')||(tipo==='r'?'Renda extra':'Outros');
     const novo={id:uid(),data:d,desc:g('desc'),cat,tipo,valor:Math.abs(v),pago:ix.pago>=0?yes(g('pago')):false,fixo:ix.fixo>=0?yes(g('fixo')):false};
-    if(!g('cat'))applyRule(novo,true);
+    if(cartao&&tipo==='d'){novo.pago=true}
+    if(ixId>=0&&r[ixId])novo.ext=String(r[ixId]).trim();
+    if(!g('cat'))applyRule(novo);
     out.push(novo);
   }
-  return {out,errs};
+  return {out,errs,skipped,cartao};
+}
+
+/* OFX (extrato/fatura do Nubank e outros bancos) */
+function ofxToLanc(txt){
+  const blocks=txt.split(/<STMTTRN>/i).slice(1);
+  if(!blocks.length)throw new Error('Não encontrei transações no arquivo OFX.');
+  const tag=(b,t)=>{const m=b.match(new RegExp('<'+t+'>([^<\r\n]*)','i'));return m?m[1].trim():''};
+  const isCard=/<CREDITCARDMSGSRSV1>/i.test(txt);
+  const out=[],errs=[];let skipped=0;
+  blocks.forEach((b,i)=>{
+    const dt=tag(b,'DTPOSTED'),v=parseFloat(tag(b,'TRNAMT').replace(',','.'));
+    const desc=tag(b,'MEMO')||tag(b,'NAME');
+    if(!/^\d{8}/.test(dt)||isNaN(v)){errs.push(i+1);return}
+    if(isCard&&/pagamento recebido|pagamento da fatura|pagamento efetuado/.test(norm(desc))){skipped++;return}
+    const tipo=v<0?'d':'r';
+    const novo={id:uid(),data:dt.slice(0,4)+'-'+dt.slice(4,6)+'-'+dt.slice(6,8),desc:desc.replace(/&amp;/g,'&'),cat:tipo==='r'?'Renda extra':'Outros',tipo,valor:Math.abs(v),pago:true,fixo:false};
+    const fid=tag(b,'FITID');if(fid)novo.ext=fid;
+    applyRule(novo);out.push(novo);
+  });
+  return {out,errs,skipped,cartao:isCard};
 }
 
 let pendingReplace=null;
@@ -718,13 +745,15 @@ $('#mImport').onclick=()=>{
       const cats=[...new Set([...state.cats,...(s.cats||[])])];
       applyImport({lanc:[...state.lanc,...nl],eventos:[...state.eventos,...ne],cats},`${nl.length} lançamento(s) e ${ne.length} compromisso(s) importados`);
     }else{
-      const {out,errs}=csvToLanc(txt);
+      const isOfx=/<OFX>|<STMTTRN>/i.test(txt);
+      const {out,errs,skipped,cartao}=isOfx?ofxToLanc(txt):csvToLanc(txt);
       if(!out.length)throw new Error('Nenhuma linha válida. Confira se as datas e os valores estão preenchidos.'+(errs.length?' Linhas com problema: '+errs.slice(0,10).join(', '):''));
       const key=l=>l.data+'|'+l.tipo+'|'+norm(l.desc)+'|'+(+l.valor).toFixed(2);
       const exist=new Set(replace?[]:state.lanc.map(key));
-      const nl=out.filter(l=>!exist.has(key(l)));const dup=out.length-nl.length;
+      const extIds=new Set(replace?[]:state.lanc.filter(l=>l.ext).map(l=>l.ext));
+      const nl=out.filter(l=>!(l.ext&&extIds.has(l.ext))&&!exist.has(key(l)));const dup=out.length-nl.length;
       const cats=[...new Set([...state.cats,...nl.map(l=>l.cat)])];
-      const label=`${nl.length} lançamento(s) importados`+(dup?` · ${dup} repetido(s) ignorado(s)`:'')+(errs.length?` · ${errs.length} linha(s) inválida(s)`:'');
+      const label=`${nl.length} lançamento(s) importados`+(dup?` · ${dup} repetido(s) ignorado(s)`:'')+(errs.length?` · ${errs.length} linha(s) inválida(s)`:'')+(skipped?` · ${skipped} pagamento(s) de fatura ignorado(s)`:'')+(cartao?' (lido como fatura de cartão)':'');
       if(replace){
         pendingReplace={s:{lanc:nl,eventos:state.eventos,cats},label};
         msg.innerHTML=`Isso vai <b>apagar todos os lançamentos</b> atuais e colocar ${nl.length} no lugar (a agenda é mantida).`;
